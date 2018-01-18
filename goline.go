@@ -20,15 +20,33 @@ type Client struct {
 	GuestPIN byte
 	client   mqtt.Client
 	gp       *grovepi.GrovePi
-	goals    chan string
+	goals    chan who
 	done     chan bool
+}
+
+type who int8
+
+const (
+	guest who = iota
+	home
+)
+
+func (w who) String() string {
+	switch w {
+	case guest:
+		return "guest"
+	case home:
+		return "home"
+	default:
+		return ""
+	}
 }
 
 // NewClient creates a new client.
 func NewClient() (*Client, error) {
 	var err error
 	c := &Client{
-		goals: make(chan string, 5),
+		goals: make(chan who, 5),
 	}
 
 	c.gp, err = grovepi.NewGrovePi(0x04)
@@ -46,7 +64,7 @@ func (c *Client) readPin(pin byte) (uint32, error) {
 	return binary.LittleEndian.Uint32(raw[1:5]), nil
 }
 
-func (c *Client) monitor(pin byte, who string, done chan bool) {
+func (c *Client) monitor(pin byte, who who, done chan bool) {
 	last, err := c.readPin(pin)
 	if err != nil {
 		log.Printf("Can't read pin: %v", err)
@@ -81,8 +99,9 @@ func (c *Client) listen(done chan bool) {
 	}
 }
 
-func (c *Client) publish(who string) error {
-	payload, err := json.Marshal(map[string]string{"scorer": who})
+func (c *Client) publish(who who) error {
+
+	payload, err := json.Marshal(map[string]string{"scorer": who.String()})
 	if err != nil {
 		return err
 	}
@@ -121,8 +140,8 @@ func (c *Client) Run() {
 	c3 := make(chan bool)
 
 	go c.listen(c1)
-	go c.monitor(grovepi.D7, "home", c2)
-	go c.monitor(grovepi.D8, "guest", c3)
+	go c.monitor(grovepi.D7, home, c2)
+	go c.monitor(grovepi.D8, guest, c3)
 
 	<-c.done
 
